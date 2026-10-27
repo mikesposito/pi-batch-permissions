@@ -20,7 +20,8 @@
   "pi": {
     "extensions": [
       "./index.ts"
-    ]
+    ],
+    "image": "./assets/multiple.png"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

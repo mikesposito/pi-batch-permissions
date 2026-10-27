@@ -7,30 +7,15 @@ every call `safe`, `caution`, or `DANGEROUS`, says what it does, and when
 something is dangerous, says why. You see the full chain, you approve once,
 the agent runs. No more approving commands one at a time.
 
-```text
-Approve 3 tool calls?
+![The batch approval dialog: every call with its danger label, what it does, and why it's dangerous](assets/multiple.png)
 
- 1  ✓ safe
-    > ls -la
-    What it does: list the project directory
+With a single call the dialog drops the numbering and batch footer:
 
- 2  ! caution
-    > npm install left-pad
-    What it does: install the missing dependency
-
- 3  ✗ DANGEROUS
-    > rm -rf dist
-    What it does: clear build output before rebuild
-    Why it's dangerous: deletes recursively, cannot be undone
-
-One approval covers every tool call in this batch.
-```
+![The single-call approval dialog](assets/single.png)
 
 Three choices: `Approve all`, `Reject all`, or `Reject with message`. The
 message goes straight back to the agent as the rejection reason, so it knows
-why and can adjust instead of blindly retrying. With a single call the dialog
-reads `Approve this tool call?` with plain `Approve` / `Reject` options and no
-numbering.
+why and can adjust instead of blindly retrying.
 
 You decide which tools are gated (default: `bash`), which mode you run in,
 and what the labeller calls dangerous. Your rules, your machine.

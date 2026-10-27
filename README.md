@@ -10,14 +10,18 @@ one at a time.
 ```text
 Approve 3 tool calls?
 
- 1  ✓ safe      ls -la
-      why: list the project directory
+ 1  ✓ safe
+    > ls -la
+    What it does: list the project directory
 
- 2  ! caution   npm install left-pad
-      why: install the missing dependency
+ 2  ! caution
+    > npm install left-pad
+    What it does: install the missing dependency
 
- 3  ✗ DANGEROUS rm -rf dist
-      why: clear build output before rebuild
+ 3  ✗ DANGEROUS
+    > rm -rf dist
+    What it does: clear build output before rebuild
+    Why it's dangerous: deletes recursively, cannot be undone
 
 One approval covers every tool call in this batch.
 ```

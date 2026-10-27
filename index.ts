@@ -143,9 +143,10 @@ tools, the arguments (paths, file content, requests).
 For each call return:
 - "danger": "safe" (read-only or trivially reversible: ls, cat, grep, git status, reading a file), "caution" (changes files or state, installs code, reaches the network, or sends a message: mv, npm install, git commit, curl, write or edit a file), or "dangerous" (destroys data, alters the system, escalates privileges, or is hard to reverse: rm -rf, sudo, git push --force, chmod 777, dd, kill, deleting or overwriting files).
 - "purpose": one line, max 12 words, saying what the call does for the task.
+- "risk": one line, max 12 words, saying WHY the call is dangerous; the empty string "" when danger is not "dangerous".
 
 Respond with ONLY a JSON array in input order, no markdown fences:
-[{"danger":"safe","purpose":"..."}]`;
+[{"danger":"safe","purpose":"...","risk":"..."}]`;
 
 type Decision = { isAllowed: boolean; assessment: Assessment };
 

@@ -21,6 +21,8 @@ export function nextMode(mode: PermissionMode): PermissionMode {
 export type Assessment = {
 	danger: Danger;
 	purpose: string;
+	/** Why the call is dangerous; empty unless danger is "dangerous". */
+	risk: string;
 };
 
 /** Per-fragment styling for the approval dialog. Defaults to plain text. */
@@ -91,11 +93,15 @@ const READ_ONLY_TOOLS = new Set(["read", "ls", "grep", "find"]);
 export function getHeuristicAssessment(toolName: string, input: string): Assessment {
 	const purpose = "no purpose (local heuristic label)";
 	if (toolName !== "bash") {
-		return { danger: READ_ONLY_TOOLS.has(toolName) ? "safe" : "caution", purpose };
+		return { danger: READ_ONLY_TOOLS.has(toolName) ? "safe" : "caution", purpose, risk: "" };
 	}
-	if (DANGEROUS_PATTERNS.some((p) => p.test(input))) return { danger: "dangerous", purpose };
-	if (CAUTION_PATTERNS.some((p) => p.test(input))) return { danger: "caution", purpose };
-	return { danger: "safe", purpose };
+	if (DANGEROUS_PATTERNS.some((p) => p.test(input))) {
+		return { danger: "dangerous", purpose, risk: "matches a known dangerous pattern (local heuristic label)" };
+	}
+	if (CAUTION_PATTERNS.some((p) => p.test(input))) {
+		return { danger: "caution", purpose, risk: "" };
+	}
+	return { danger: "safe", purpose, risk: "" };
 }
 
 /**
@@ -119,12 +125,13 @@ export function parseAssessments(raw: string, count: number): Assessment[] | und
 	const result: Assessment[] = [];
 	for (const item of parsed) {
 		if (typeof item !== "object" || item === null) return undefined;
-		// Safe because only "danger" and "purpose" are read, and both are
-		// validated immediately below.
-		const { danger, purpose } = item as Record<string, unknown>;
+		// Safe because only "danger", "purpose", and "risk" are read, and all
+		// are validated immediately below.
+		const { danger, purpose, risk } = item as Record<string, unknown>;
 		if (danger !== "safe" && danger !== "caution" && danger !== "dangerous") return undefined;
 		const text = typeof purpose === "string" ? purpose.slice(0, 120).trim() : "";
-		result.push({ danger, purpose: text || "(no purpose given)" });
+		const riskText = typeof risk === "string" ? risk.slice(0, 120).trim() : "";
+		result.push({ danger, purpose: text || "(no purpose given)", risk: riskText });
 	}
 	return result;
 }
@@ -144,10 +151,13 @@ export function formatBatch(
 		"",
 	];
 	for (let i = 0; i < commands.length; i++) {
-		lines.push(
-			` ${String(i + 1).padEnd(2)} ${style.label(assessments[i].danger, LABELS[assessments[i].danger].padEnd(12))}${style.text(truncate(commands[i], 300))}`,
-		);
-		lines.push(`      ${style.dim(`why: ${assessments[i].purpose}`)}`);
+		const assessment = assessments[i];
+		lines.push(` ${String(i + 1).padEnd(2)} ${style.label(assessment.danger, LABELS[assessment.danger])}`);
+		lines.push(`    ${style.dim("> ")}${style.text(truncate(commands[i], 300))}`);
+		lines.push(`    ${style.dim(`What it does: ${assessment.purpose}`)}`);
+		if (assessment.danger === "dangerous" && assessment.risk) {
+			lines.push(`    ${style.label("dangerous", `Why it's dangerous: ${assessment.risk}`)}`);
+		}
 		lines.push("");
 	}
 	lines.push(style.dim("One approval covers every tool call in this batch."));
@@ -156,5 +166,13 @@ export function formatBatch(
 
 /** Body for the single-call fallback dialog. */
 export function formatSingle(command: string, assessment: Assessment, style: DialogStyle = plainStyle): string {
-	return `${style.label(assessment.danger, LABELS[assessment.danger].padEnd(12))}${style.text(truncate(command, 300))}\n${style.dim(`why: ${assessment.purpose}`)}`;
+	const lines = [
+		style.label(assessment.danger, LABELS[assessment.danger]),
+		`  ${style.dim("> ")}${style.text(truncate(command, 300))}`,
+		`  ${style.dim(`What it does: ${assessment.purpose}`)}`,
+	];
+	if (assessment.danger === "dangerous" && assessment.risk) {
+		lines.push(`  ${style.label("dangerous", `Why it's dangerous: ${assessment.risk}`)}`);
+	}
+	return lines.join("\n");
 }

@@ -67,11 +67,18 @@ assert.equal(getHeuristicAssessment("edit", "edit diff").danger, "caution");
 assert.equal(getHeuristicAssessment("mcp__slack__send_message", "send").danger, "caution");
 
 // parser
-assert.deepEqual(parseAssessments('[{"danger":"safe","purpose":"list files"}]', 1), [
-	{ danger: "safe", purpose: "list files" },
+assert.deepEqual(
+	parseAssessments('[{"danger":"safe","purpose":"list files","risk":""}]', 1),
+	[{ danger: "safe", purpose: "list files", risk: "" }],
+);
+assert.equal(
+	parseAssessments('[{"danger":"dangerous","purpose":"x","risk":"destroys data"}]', 1)?.[0].risk,
+	"destroys data",
+);
+assert.deepEqual(parseAssessments('[{"danger":"safe"}]', 1), [
+	{ danger: "safe", purpose: "(no purpose given)", risk: "" },
 ]);
 assert.equal(parseAssessments('```json\n[{"danger":"caution","purpose":"x"}]\n```', 1)?.[0].danger, "caution");
-assert.deepEqual(parseAssessments('[{"danger":"safe"}]', 1), [{ danger: "safe", purpose: "(no purpose given)" }]);
 assert.equal(parseAssessments('[{"danger":"weird","purpose":"x"}]', 1), undefined);
 assert.equal(parseAssessments('[{"danger":"safe"}, {"danger":"safe"}]', 1), undefined);
 assert.equal(parseAssessments("[]", 1), undefined);
@@ -83,23 +90,35 @@ assert.deepEqual(
 	["safe", "dangerous"],
 );
 
+// heuristics carry a risk line only for dangerous calls
+assert.ok(getHeuristicAssessment("bash", "rm -rf /tmp/x").risk.length > 0);
+assert.equal(getHeuristicAssessment("bash", "ls").risk, "");
+assert.equal(getHeuristicAssessment("read", "read").risk, "");
+
 // formatting
-const batch = formatBatch(["ls -la", "rm -rf /tmp/batch-demo"], [
-	{ danger: "safe", purpose: "list files" },
-	{ danger: "dangerous", purpose: "overwrite remote history" },
-]);
+const batch = formatBatch(
+	["ls -la", "rm -rf /tmp/batch-demo"],
+	[
+		{ danger: "safe", purpose: "list files", risk: "" },
+		{ danger: "dangerous", purpose: "remove the demo directory", risk: "recursive delete, cannot be undone" },
+	],
+);
 assert.match(batch, /Approve 2 tool calls\?/);
-assert.match(batch, /1\s+✓ safe\s+ls -la/);
-assert.match(batch, /2\s+✗ DANGEROUS rm -rf \/tmp\/batch-demo/);
-assert.match(batch, /why: overwrite remote history/);
+assert.match(batch, /1\s+✓ safe$/m);
+assert.match(batch, /2\s+✗ DANGEROUS$/m);
+assert.match(batch, /> ls -la/);
+assert.match(batch, /> rm -rf \/tmp\/batch-demo/);
+assert.match(batch, /What it does: list files/);
+assert.match(batch, /What it does: remove the demo directory/);
+assert.match(batch, /Why it's dangerous: recursive delete, cannot be undone/);
+assert.ok(!batch.includes("Why it's dangerous: list files"));
 assert.match(batch, /One approval covers every tool call/);
-assert.match(formatBatch(["ls"], [{ danger: "safe", purpose: "x" }]), /Approve 1 tool call\?/);
-assert.match(formatBatch(['write {"path":"a"}'], [{ danger: "caution", purpose: "x" }]), /! caution\s+write/);
+assert.match(formatBatch(["ls"], [{ danger: "safe", purpose: "x", risk: "" }]), /Approve 1 tool call\?/);
 assert.match(
-	formatSingle("rm -rf /", { danger: "dangerous", purpose: "delete everything" }),
-	/✗ DANGEROUS\s+rm -rf \//,
+	formatSingle("rm -rf /", { danger: "dangerous", purpose: "delete everything", risk: "irreversible" }),
+	/✗ DANGEROUS\n\s+> rm -rf \/\n\s+What it does: delete everything\n\s+Why it's dangerous: irreversible/,
 );
 // plain style passes fragments through untouched
-assert.doesNotMatch(formatBatch(["ls"], [{ danger: "safe", purpose: "x" }]), /\u001b\[/);
+assert.doesNotMatch(formatBatch(["ls"], [{ danger: "safe", purpose: "x", risk: "" }]), /\u001b\[/);
 
 console.log("pi-batch-permissions core: all checks passed");

@@ -148,7 +148,7 @@ For each call return:
 Respond with ONLY a JSON array in input order, no markdown fences:
 [{"danger":"safe","purpose":"...","risk":"..."}]`;
 
-type Decision = { isAllowed: boolean; assessment: Assessment };
+type Decision = { isAllowed: boolean; assessment: Assessment; rejectMessage?: string };
 
 const decisions = new Map<string, Decision>();
 
@@ -208,6 +208,29 @@ function getDialogStyle(ctx: ExtensionContext): DialogStyle {
 	};
 }
 
+// Runs the approval dialog (or headless fallback) and stores one decision per
+// call. Returns the rejection message when the user wrote one.
+async function approveWithDialog(
+	body: string,
+	isSingle: boolean,
+	ctx: ExtensionContext,
+): Promise<{ isAllowed: boolean; rejectMessage?: string }> {
+	const approveLabel = isSingle ? "Approve" : "Approve all";
+	const rejectLabel = isSingle ? "Reject" : "Reject all";
+	const choice = await ctx.ui.select(body, [approveLabel, rejectLabel, "Reject with message"]);
+	if (choice === "Reject with message") {
+		// Cancelling the input still rejects, just without a message.
+		const message = await ctx.ui.input("Why reject? This is sent to the agent.");
+		return { isAllowed: false, rejectMessage: message ?? undefined };
+	}
+	return { isAllowed: choice === approveLabel };
+}
+
+function rejectReason(toolName: string, args: Record<string, unknown>, rejectMessage?: string): string {
+	const base = `User rejected this ${toolName} call: ${describeCall(toolName, args)}`;
+	return rejectMessage ? `${base}. User said: ${rejectMessage}` : base;
+}
+
 async function approveBatch(
 	entries: GatedCall[],
 	taskContext: string,
@@ -218,20 +241,23 @@ async function approveBatch(
 	const assessments = await classifyCalls(entries, taskContext, ctx);
 	const displays = entries.map((e) => describeCall(e.tool, e.args));
 	let isAllowed: boolean;
+	let rejectMessage: string | undefined;
 	if (mode === "auto" && assessments.every((a) => a.danger !== "dangerous")) {
 		isAllowed = true;
 	} else if (ctx.hasUI) {
-		isAllowed =
-			(await ctx.ui.select(
-				formatBatch(displays, assessments, getDialogStyle(ctx)),
-				["Approve all", "Reject all"],
-			)) === "Approve all";
+		const decision = await approveWithDialog(
+			formatBatch(displays, assessments, getDialogStyle(ctx)),
+			entries.length === 1,
+			ctx,
+		);
+		isAllowed = decision.isAllowed;
+		rejectMessage = decision.rejectMessage;
 	} else {
 		// no UI: fail-safe, only clearly safe calls pass without a human
 		isAllowed = assessments.every((a) => a.danger === "safe");
 	}
 	for (const [i, entry] of entries.entries()) {
-		decisions.set(entry.id, { isAllowed, assessment: assessments[i] });
+		decisions.set(entry.id, { isAllowed, assessment: assessments[i], rejectMessage });
 	}
 }
 
@@ -267,17 +293,21 @@ export default function (pi: ExtensionAPI) {
 			const entry: GatedCall = { id: event.toolCallId, tool: event.toolName, args: getCallArgs(event.input) };
 			const [assessment] = await classifyCalls([entry], "", ctx);
 			let isAllowed: boolean;
+			let rejectMessage: string | undefined;
 			if (getCurrentMode() === "auto" && assessment.danger !== "dangerous") {
 				isAllowed = true;
 			} else if (ctx.hasUI) {
-				isAllowed = await ctx.ui.confirm(
-					"Allow tool call?",
+				const decision = await approveWithDialog(
 					formatSingle(describeCall(entry.tool, entry.args), assessment, getDialogStyle(ctx)),
+					true,
+					ctx,
 				);
+				isAllowed = decision.isAllowed;
+				rejectMessage = decision.rejectMessage;
 			} else {
 				isAllowed = assessment.danger === "safe";
 			}
-			decisions.set(event.toolCallId, { isAllowed, assessment });
+			decisions.set(event.toolCallId, { isAllowed, assessment, rejectMessage });
 		}
 		const decision = decisions.get(event.toolCallId);
 		decisions.delete(event.toolCallId);
@@ -285,7 +315,7 @@ export default function (pi: ExtensionAPI) {
 		if (!decision?.isAllowed) {
 			return {
 				block: true,
-				reason: `User rejected this ${event.toolName} call: ${describeCall(event.toolName, getCallArgs(event.input))}`,
+				reason: rejectReason(event.toolName, getCallArgs(event.input), decision?.rejectMessage),
 			};
 		}
 		return undefined;

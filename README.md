@@ -3,9 +3,9 @@
 Make your agent safer with configurable permissions.
 
 One approval for a whole chain of tool calls. A cheap classifier model labels
-every call `safe`, `caution`, or `DANGEROUS` with a one-line purpose. You see
-the full chain, you approve once, the agent runs. No more approving commands
-one at a time.
+every call `safe`, `caution`, or `DANGEROUS`, says what it does, and when
+something is dangerous, says why. You see the full chain, you approve once,
+the agent runs. No more approving commands one at a time.
 
 ```text
 Approve 3 tool calls?
@@ -25,6 +25,12 @@ Approve 3 tool calls?
 
 One approval covers every tool call in this batch.
 ```
+
+Three choices: `Approve all`, `Reject all`, or `Reject with message`. The
+message goes straight back to the agent as the rejection reason, so it knows
+why and can adjust instead of blindly retrying. With a single call the dialog
+reads `Approve this tool call?` with plain `Approve` / `Reject` options and no
+numbering.
 
 You decide which tools are gated (default: `bash`), which mode you run in,
 and what the labeller calls dangerous. Your rules, your machine.

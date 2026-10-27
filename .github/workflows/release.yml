@@ -7,14 +7,16 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
     if: >-
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/')
-    # Protected environment: NPM_TOKEN lives here, and a required reviewer
-    # must approve the run, so a tampered workflow file cannot use the token.
+    # Protected environment: a required reviewer must approve the run, and
+    # the npm trusted publisher registration pins this exact environment, so
+    # a tampered workflow file cannot publish.
     environment: release
     runs-on: ubuntu-latest
     steps:
@@ -42,9 +44,9 @@ jobs:
         run: node smoke.mjs
 
       - name: Publish to npm
+        # Trusted publishing: npm CLI exchanges the workflow's OIDC token for a
+        # short-lived publish token. No NPM_TOKEN secret is involved.
         run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Tag and create GitHub release
         env:

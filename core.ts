@@ -146,8 +146,11 @@ export function formatBatch(
 	assessments: Assessment[],
 	style: DialogStyle = plainStyle,
 ): string {
+	if (commands.length === 1) {
+		return `Approve this tool call?\n\n${formatSingle(commands[0], assessments[0], style)}`;
+	}
 	const lines = [
-		`Approve ${commands.length} tool call${commands.length === 1 ? "" : "s"}?`,
+		`Approve ${commands.length} tool calls?`,
 		"",
 	];
 	for (let i = 0; i < commands.length; i++) {
@@ -164,7 +167,7 @@ export function formatBatch(
 	return lines.join("\n");
 }
 
-/** Body for the single-call fallback dialog. */
+/** Body for the single-call fallback dialog, also embedded by formatBatch. */
 export function formatSingle(command: string, assessment: Assessment, style: DialogStyle = plainStyle): string {
 	const lines = [
 		style.label(assessment.danger, LABELS[assessment.danger]),

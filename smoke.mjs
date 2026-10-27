@@ -113,7 +113,11 @@ assert.match(batch, /What it does: remove the demo directory/);
 assert.match(batch, /Why it's dangerous: recursive delete, cannot be undone/);
 assert.ok(!batch.includes("Why it's dangerous: list files"));
 assert.match(batch, /One approval covers every tool call/);
-assert.match(formatBatch(["ls"], [{ danger: "safe", purpose: "x", risk: "" }]), /Approve 1 tool call\?/);
+const single = formatBatch(["ls"], [{ danger: "safe", purpose: "x", risk: "" }]);
+assert.match(single, /Approve this tool call\?/);
+assert.match(single, /> ls/);
+assert.ok(!single.includes(" 1  "));
+assert.ok(!single.includes("One approval covers"));
 assert.match(
 	formatSingle("rm -rf /", { danger: "dangerous", purpose: "delete everything", risk: "irreversible" }),
 	/✗ DANGEROUS\n\s+> rm -rf \/\n\s+What it does: delete everything\n\s+Why it's dangerous: irreversible/,

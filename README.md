@@ -9,10 +9,6 @@ the agent runs. No more approving commands one at a time.
 
 ![The batch approval dialog: every call with its danger label, what it does, and why it's dangerous](assets/multiple.png)
 
-With a single call the dialog drops the numbering and batch footer:
-
-![The single-call approval dialog](assets/single.png)
-
 Three choices: `Approve all`, `Reject all`, or `Reject with message`. The
 message goes straight back to the agent as the rejection reason, so it knows
 why and can adjust instead of blindly retrying.

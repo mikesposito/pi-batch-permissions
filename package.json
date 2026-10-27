@@ -1,6 +1,6 @@
 {
   "name": "pi-batch-permissions",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Make your agent safer with configurable permissions: one approval for a whole chain of tool calls, each labeled safe/caution/dangerous by a cheap model of your choice.",
   "keywords": [
     "pi-package",

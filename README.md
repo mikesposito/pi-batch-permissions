@@ -1,6 +1,7 @@
 # pi-batch-permissions
 
-Make your agent safer with configurable permissions.
+Your agent, your rules: a tailorable permission system that balances safety
+with development speed.
 
 One approval for a whole chain of tool calls. A cheap classifier model labels
 every call `safe`, `caution`, or `DANGEROUS`, says what it does, and when

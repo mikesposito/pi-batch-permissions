@@ -1,0 +1,64 @@
+name: Create release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      releaseType:
+        description: Release type
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute next version
+        env:
+          RELEASE_TYPE: ${{ inputs.releaseType }}
+        run: |
+          NEXT=$(node -e "const p=require('./package.json');const[m,i,x]=p.version.split('.').map(Number);const t=process.env.RELEASE_TYPE;const v=t==='major'?[m+1,0,0]:t==='minor'?[m,i+1,0]:[m,i,x+1];console.log(v.join('.'))")
+          echo "NEXT=$NEXT" >> "$GITHUB_ENV"
+          echo "Next version: $NEXT (current: $(node -p "require('./package.json').version"))"
+
+      - name: Refuse duplicate release
+        run: |
+          if git ls-remote --heads origin "release/$NEXT" | grep -q .; then
+            echo "::error::Branch release/$NEXT already exists"
+            exit 1
+          fi
+          if git ls-remote --tags origin "$NEXT" | grep -q .; then
+            echo "::error::Tag $NEXT already exists"
+            exit 1
+          fi
+
+      - name: Bump version and push release branch
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version=process.env.NEXT;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "release/$NEXT"
+          git add package.json
+          git commit -m "Release $NEXT"
+          git push -u origin "release/$NEXT"
+
+      - name: Open release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "Release $NEXT" \
+            --body "Automated release PR for \`$NEXT\` (type: \`${{ inputs.releaseType }}\`).
+
+          Merging it triggers the release workflow: publish to npm via trusted
+          publishing, then the \`$NEXT\` tag and GitHub Release."

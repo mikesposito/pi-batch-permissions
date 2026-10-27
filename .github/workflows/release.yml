@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
+    # Protected environment: a required reviewer must approve the run, and
+    # the npm trusted publisher registration pins this exact environment, so
+    # a tampered workflow file cannot publish.
+    environment: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify package version matches release branch
+        run: |
+          VERSION="${{ github.event.pull_request.head.ref }}"
+          VERSION="${VERSION#release/}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Branch releases $VERSION but package.json says $PKG_VERSION"
+            exit 1
+          fi
+          echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Smoke test
+        run: node smoke.mjs
+
+      - name: Publish to npm
+        # Trusted publishing: npm CLI exchanges the workflow's OIDC token for a
+        # short-lived publish token. No NPM_TOKEN secret is involved.
+        run: npm publish
+
+      - name: Tag and create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$RELEASE_VERSION" \
+            --target "${{ github.event.pull_request.merge_commit_sha }}" \
+            --title "$RELEASE_VERSION" \
+            --generate-notes

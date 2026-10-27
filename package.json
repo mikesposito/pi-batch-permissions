@@ -1,13 +1,23 @@
 {
   "name": "pi-batch-permissions",
   "version": "0.2.0",
-  "description": "Make your agent safer with configurable permissions: one approval for a whole chain of tool calls, each labeled safe/caution/dangerous by a cheap model of your choice.",
+  "description": "Your agent, your rules: a tailorable permission system that balances safety with development speed.",
   "keywords": [
     "pi-package",
     "pi-batch-permissions"
   ],
   "license": "MIT",
   "type": "module",
+  "pi": {
+    "image": "./assets/multiple.png",
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*"
+  },
   "author": "mikesposito",
   "repository": {
     "type": "git",
@@ -16,16 +26,6 @@
   "homepage": "https://github.com/mikesposito/pi-batch-permissions#readme",
   "bugs": {
     "url": "https://github.com/mikesposito/pi-batch-permissions/issues"
-  },
-  "pi": {
-    "extensions": [
-      "./index.ts"
-    ],
-    "image": "./assets/multiple.png"
-  },
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-ai": "*"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"

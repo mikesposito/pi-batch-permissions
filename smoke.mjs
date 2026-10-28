@@ -8,6 +8,7 @@ import {
 	formatSingle,
 	normalizeMode,
 	normalizeShortcut,
+	isPermissionMode,
 	nextMode,
 	withPolicy,
 } from "./core.ts";
@@ -24,6 +25,13 @@ assert.equal(normalizeMode("nonsense"), "fastened");
 assert.equal(nextMode("fastened"), "auto");
 assert.equal(nextMode("auto"), "unfastened");
 assert.equal(nextMode("unfastened"), "fastened");
+assert.ok(isPermissionMode("fastened"));
+assert.ok(isPermissionMode("auto"));
+assert.ok(isPermissionMode("unfastened"));
+assert.ok(!isPermissionMode("all"));
+assert.ok(!isPermissionMode("off"));
+assert.ok(!isPermissionMode("nonsense"));
+assert.ok(!isPermissionMode(undefined));
 
 // shortcut normalization
 assert.equal(normalizeShortcut(undefined), "alt+b");

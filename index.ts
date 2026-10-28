@@ -41,6 +41,7 @@ import {
 	formatSingle,
 	normalizeMode,
 	normalizeShortcut,
+	isPermissionMode,
 	nextMode,
 	plainStyle,
 	withPolicy,
@@ -382,6 +383,22 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.setStatus("seatbelt", text);
 	}
 
+	pi.registerCommand("seatbelt:mode", {
+		description: "Switch seatbelt mode (fastened, auto, unfastened); no argument cycles",
+		handler: async (args, ctx) => {
+			const wanted = args.trim();
+			if (wanted && !isPermissionMode(wanted)) {
+				ctx.ui.notify(`Unknown mode: ${wanted}. Use fastened, auto, or unfastened.`, "error");
+				return;
+			}
+			// Safe cast: wanted is non-empty and passed isPermissionMode above.
+			const mode = (wanted || nextMode(getCurrentMode())) as PermissionMode;
+			writeConfig({ ...readConfig(), mode });
+			updateStatus(ctx);
+			ctx.ui.notify(`Seatbelt: ${mode} (${MODE_HINTS[mode]})`, "info");
+		},
+	});
+
 	pi.on("session_start", (_event, ctx) => {
 		updateStatus(ctx);
 		if (hasSeededFreshConfig && ctx.hasUI) {
@@ -398,7 +415,7 @@ export default function (pi: ExtensionAPI) {
 		ExtensionAPI["registerShortcut"]
 	>[0];
 	pi.registerShortcut(shortcut, {
-		description: "Cycle seatbelt mode (all, auto, off)",
+		description: "Cycle seatbelt mode (fastened, auto, unfastened)",
 		handler: (ctx) => {
 			const mode = nextMode(getCurrentMode());
 			writeConfig({ ...readConfig(), mode });

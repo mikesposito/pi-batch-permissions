@@ -1,6 +1,6 @@
 export type Danger = "safe" | "caution" | "dangerous";
 
-export const PERMISSION_MODES = ["all", "auto", "off"] as const;
+export const PERMISSION_MODES = ["fastened", "auto", "unfastened"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
 export function isPermissionMode(value: unknown): value is PermissionMode {
@@ -10,7 +10,7 @@ export function isPermissionMode(value: unknown): value is PermissionMode {
 }
 
 export function normalizeMode(value: unknown): PermissionMode {
-	return isPermissionMode(value) ? value : "all";
+	return isPermissionMode(value) ? value : "fastened";
 }
 
 export function nextMode(mode: PermissionMode): PermissionMode {

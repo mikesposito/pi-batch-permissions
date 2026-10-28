@@ -45,7 +45,8 @@ packages as peers.
 
 Press the mode key to cycle: `alt+b` by default, or any key you set (see
 `shortcut` under [Configure](#configure)). The status bar always shows
-where you are: `perm:all`, `perm:auto`, `perm:off`. The choice persists.
+where you are: `seatbelt:fastened 🔒` (green), `seatbelt:auto 🤖` (yellow),
+`seatbelt:unfastened 💀` (red). The choice persists.
 
 - `all`: every chain asks once. The default.
 - `auto`: no dialog unless something is `DANGEROUS`. Labels decide what runs

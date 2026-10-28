@@ -7,6 +7,7 @@ import {
 	formatBatch,
 	formatSingle,
 	normalizeMode,
+	normalizeShortcut,
 	nextMode,
 	withPolicy,
 } from "./core.ts";
@@ -19,6 +20,17 @@ assert.equal(normalizeMode("nonsense"), "all");
 assert.equal(nextMode("all"), "auto");
 assert.equal(nextMode("auto"), "off");
 assert.equal(nextMode("off"), "all");
+
+// shortcut normalization
+assert.equal(normalizeShortcut(undefined), "alt+b");
+assert.equal(normalizeShortcut(null), "alt+b");
+assert.equal(normalizeShortcut(42), "alt+b");
+assert.equal(normalizeShortcut(""), "alt+b");
+assert.equal(normalizeShortcut("   "), "alt+b");
+assert.equal(normalizeShortcut("alt b"), "alt+b");
+assert.equal(normalizeShortcut("alt+b"), "alt+b");
+assert.equal(normalizeShortcut("  ctrl+shift+b  "), "ctrl+shift+b");
+assert.equal(normalizeShortcut("f9"), "f9");
 
 // policy merge
 assert.equal(withPolicy("BASE", ""), "BASE");

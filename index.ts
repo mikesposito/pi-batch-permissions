@@ -17,7 +17,8 @@
  * model, local heuristics label the calls instead (the policy file only
  * affects the model).
  *
- * Permission modes (cycled with alt+b, shown in the status bar):
+ * Permission modes (cycled with the configured shortcut key, default alt+b,
+ * shown in the status bar):
  * - "all" (default): one approval dialog per chain of gated tool calls.
  * - "auto": chains without a dangerous call run without asking; a dangerous
  *   call still shows the approval dialog.
@@ -30,6 +31,7 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Model, UserMessage } from "@earendil-works/pi-ai";
 import {
+	DEFAULT_SHORTCUT,
 	describeCall,
 	getHeuristicAssessment,
 	matchesTool,
@@ -37,6 +39,7 @@ import {
 	formatBatch,
 	formatSingle,
 	normalizeMode,
+	normalizeShortcut,
 	nextMode,
 	plainStyle,
 	withPolicy,
@@ -60,6 +63,7 @@ contains only this header, the built-in defaults apply unchanged.
 const CONFIG_TEMPLATE = {
 	timeoutMs: 20000,
 	mode: "all",
+	shortcut: DEFAULT_SHORTCUT,
 	tools: ["bash"],
 };
 
@@ -89,6 +93,7 @@ type Config = {
 	model?: string;
 	timeoutMs?: number;
 	mode?: string;
+	shortcut?: string;
 	tools?: string[];
 };
 
@@ -378,7 +383,12 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	pi.registerShortcut("alt+b", {
+	// Read at startup; KeyId is a compile-time union, so the runtime string
+	// from config is cast after normalizeShortcut validated it.
+	const shortcut = normalizeShortcut(readConfig().shortcut) as Parameters<
+		ExtensionAPI["registerShortcut"]
+	>[0];
+	pi.registerShortcut(shortcut, {
 		description: "Cycle batch-permission mode (all, auto, off)",
 		handler: (ctx) => {
 			const mode = nextMode(getCurrentMode());

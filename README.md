@@ -42,8 +42,9 @@ packages as peers.
 
 ## Three modes, one key
 
-Press `alt+b` to cycle. The status bar always shows where you are:
-`perm:all`, `perm:auto`, `perm:off`. The choice persists.
+Press the mode key to cycle: `alt+b` by default, or any key you set (see
+`shortcut` under [Configure](#configure)). The status bar always shows
+where you are: `perm:all`, `perm:auto`, `perm:off`. The choice persists.
 
 - `all`: every chain asks once. The default.
 - `auto`: no dialog unless something is `DANGEROUS`. Labels decide what runs
@@ -90,6 +91,7 @@ built-in regex fallback labels calls and the policy file is not consulted.
   "model": "litellm/DeepSeek-V4-Flash",
   "timeoutMs": 20000,
   "mode": "all",
+  "shortcut": "alt+b",
   "tools": ["bash", "write", "edit", "mcp__slack__*"]
 }
 ```
@@ -98,6 +100,9 @@ built-in regex fallback labels calls and the policy file is not consulted.
   `mcp__github__create_issue`) or prefix patterns (`mcp__slack__*` for a
   whole server, `*` for everything). Non-bash calls are shown to the
   labeller as tool name plus arguments, truncated to 500 characters.
+- `shortcut`: the key that cycles the permission modes, as a pi key id
+  (`"alt+b"`, `"ctrl+shift+p"`, `"f9"`). Read at startup, so a change
+  needs a new session. Anything malformed falls back to `alt+b`.
 - `model`: the labeller. Pick one with `/batchmodel`, or pass it directly:
   `/batchmodel litellm/gpt-4o-mini`. Fast and cheap works well; the prompt
   is tiny. Without a model, or if the call fails or times out, the regex

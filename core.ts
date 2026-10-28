@@ -18,6 +18,17 @@ export function nextMode(mode: PermissionMode): PermissionMode {
 	return PERMISSION_MODES[index] ?? mode;
 }
 
+export const DEFAULT_SHORTCUT = "alt+b";
+
+/**
+ * A pi key id from config ("alt+b", "ctrl+shift+p", "f5"): a non-empty
+ * string without whitespace. Anything else falls back to the default.
+ */
+export function normalizeShortcut(value: unknown): string {
+	const key = typeof value === "string" ? value.trim() : "";
+	return key !== "" && !/\s/.test(key) ? key : DEFAULT_SHORTCUT;
+}
+
 export type Assessment = {
 	danger: Danger;
 	purpose: string;

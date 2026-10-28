@@ -360,12 +360,25 @@ export default function (pi: ExtensionAPI) {
 		off: "no approval requests",
 	} satisfies Record<PermissionMode, string>;
 
+	// Status-bar wording: gated (fastened), no gating (unfastened), the
+	// labeller decides what runs (auto).
+	const MODE_LABELS = {
+		all: "fastened 🔒",
+		auto: "auto 🤖",
+		off: "unfastened 💀",
+	} satisfies Record<PermissionMode, string>;
+
+	const MODE_COLOR = {
+		all: "success",
+		auto: "warning",
+		off: "error",
+	} satisfies Record<PermissionMode, "success" | "warning" | "error">;
+
 	function updateStatus(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return;
 		const mode = getCurrentMode();
-		const color = mode === "all" ? "accent" : mode === "auto" ? "success" : "dim";
-		const text =
-			ctx.mode === "tui" ? ctx.ui.theme.fg(color, `perm:${mode}`) : `perm:${mode}`;
+		const label = `seatbelt:${MODE_LABELS[mode]}`;
+		const text = ctx.mode === "tui" ? ctx.ui.theme.fg(MODE_COLOR[mode], label) : label;
 		ctx.ui.setStatus("seatbelt", text);
 	}
 

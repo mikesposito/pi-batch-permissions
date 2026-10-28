@@ -48,10 +48,10 @@ Press the mode key to cycle: `alt+b` by default, or any key you set (see
 where you are: `seatbelt:fastened 🔒` (green), `seatbelt:auto 🤖` (yellow),
 `seatbelt:unfastened 💀` (red). The choice persists.
 
-- `all`: every chain asks once. The default.
+- `fastened`: every chain asks once. The default.
 - `auto`: no dialog unless something is `DANGEROUS`. Labels decide what runs
   silently, so pair it with a good policy file.
-- `off`: no gating, no classifier calls, no cost.
+- `unfastened`: no gating, no classifier calls, no cost.
 
 Headless modes (print, JSON) have no dialogs: only `safe` calls auto-run,
 everything else is blocked with a reason.
@@ -92,7 +92,7 @@ built-in regex fallback labels calls and the policy file is not consulted.
 {
   "model": "litellm/DeepSeek-V4-Flash",
   "timeoutMs": 20000,
-  "mode": "all",
+  "mode": "fastened",
   "shortcut": "alt+b",
   "tools": ["bash", "write", "edit", "mcp__slack__*"]
 }
@@ -105,6 +105,9 @@ built-in regex fallback labels calls and the policy file is not consulted.
 - `shortcut`: the key that cycles the permission modes, as a pi key id
   (`"alt+b"`, `"ctrl+shift+p"`, `"f9"`). Read at startup, so a change
   needs a new session. Anything malformed falls back to `alt+b`.
+  Some combos need the terminal to report modifiers distinctly: through
+  tmux without `set -s extended-keys on`, `ctrl+shift+b` arrives as plain
+  `ctrl+b` (cursor-left) — `alt`- and `F`-keys work everywhere.
 - `model`: the labeller. Pick one with `/seatbelt`, or pass it directly:
   `/seatbelt litellm/gpt-4o-mini`. Fast and cheap works well; the prompt
   is tiny. Without a model, or if the call fails or times out, the regex

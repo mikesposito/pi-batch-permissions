@@ -13,13 +13,17 @@ import {
 } from "./core.ts";
 
 // permission modes
-assert.equal(normalizeMode(undefined), "all");
+assert.equal(normalizeMode(undefined), "fastened");
+assert.equal(normalizeMode("fastened"), "fastened");
 assert.equal(normalizeMode("auto"), "auto");
-assert.equal(normalizeMode("off"), "off");
-assert.equal(normalizeMode("nonsense"), "all");
-assert.equal(nextMode("all"), "auto");
-assert.equal(nextMode("auto"), "off");
-assert.equal(nextMode("off"), "all");
+assert.equal(normalizeMode("unfastened"), "unfastened");
+// pre-rename values are no longer valid and fall back to the default
+assert.equal(normalizeMode("all"), "fastened");
+assert.equal(normalizeMode("off"), "fastened");
+assert.equal(normalizeMode("nonsense"), "fastened");
+assert.equal(nextMode("fastened"), "auto");
+assert.equal(nextMode("auto"), "unfastened");
+assert.equal(nextMode("unfastened"), "fastened");
 
 // shortcut normalization
 assert.equal(normalizeShortcut(undefined), "alt+b");

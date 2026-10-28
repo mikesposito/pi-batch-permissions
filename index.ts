@@ -20,10 +20,10 @@
  *
  * Permission modes (cycled with the configured shortcut key, default alt+b,
  * shown in the status bar):
- * - "all" (default): one approval dialog per chain of gated tool calls.
+ * - "fastened" (default): one approval dialog per chain of gated tool calls.
  * - "auto": chains without a dangerous call run without asking; a dangerous
  *   call still shows the approval dialog.
- * - "off": no approval requests at all.
+ * - "unfastened": no approval requests at all.
  * In headless modes (no UI) only "safe" calls are auto-allowed.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -63,7 +63,7 @@ contains only this header, the built-in defaults apply unchanged.
 
 const CONFIG_TEMPLATE = {
 	timeoutMs: 20000,
-	mode: "all",
+	mode: "fastened",
 	shortcut: DEFAULT_SHORTCUT,
 	tools: ["bash"],
 };
@@ -238,7 +238,7 @@ async function approveBatch(
 	ctx: ExtensionContext,
 ): Promise<void> {
 	const mode = getCurrentMode();
-	if (mode === "off") return;
+	if (mode === "unfastened") return;
 	const assessments = await classifyCalls(entries, taskContext, ctx);
 	const displays = entries.map((e) => describeCall(e.tool, e.args));
 	let isAllowed: boolean;
@@ -277,7 +277,7 @@ export default function (pi: ExtensionAPI) {
 			)
 			.map((c) => ({ id: c.id, tool: c.name, args: c.arguments ?? {} }));
 		if (calls.length === 0) return;
-		if (getCurrentMode() === "off") return;
+		if (getCurrentMode() === "unfastened") return;
 		const taskContext = message.content
 			.filter((c): c is { type: "text"; text: string } => c.type === "text")
 			.map((c) => c.text)
@@ -288,7 +288,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("tool_call", async (event, ctx) => {
 		if (!matchesTool(getGatedTools(), event.toolName)) return undefined;
-		if (getCurrentMode() === "off") return undefined;
+		if (getCurrentMode() === "unfastened") return undefined;
 		if (!decisions.has(event.toolCallId)) {
 			// Nested or otherwise unseen call (for example a codemode script): approve it on its own
 			const entry: GatedCall = { id: event.toolCallId, tool: event.toolName, args: getCallArgs(event.input) };
@@ -355,23 +355,23 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	const MODE_HINTS = {
-		all: "every chain of gated tool calls needs one approval",
+		fastened: "every chain of gated tool calls needs one approval",
 		auto: "auto-approve unless a call is dangerous",
-		off: "no approval requests",
+		unfastened: "no approval requests",
 	} satisfies Record<PermissionMode, string>;
 
 	// Status-bar wording: gated (fastened), no gating (unfastened), the
 	// labeller decides what runs (auto).
 	const MODE_LABELS = {
-		all: "fastened 🔒",
+		fastened: "fastened 🔒",
 		auto: "auto 🤖",
-		off: "unfastened 💀",
+		unfastened: "unfastened 💀",
 	} satisfies Record<PermissionMode, string>;
 
 	const MODE_COLOR = {
-		all: "success",
+		fastened: "success",
 		auto: "warning",
-		off: "error",
+		unfastened: "error",
 	} satisfies Record<PermissionMode, "success" | "warning" | "error">;
 
 	function updateStatus(ctx: ExtensionContext): void {

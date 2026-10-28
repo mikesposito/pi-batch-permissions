@@ -44,7 +44,9 @@ packages as peers.
 ## Three modes, one key
 
 Press the mode key to cycle: `alt+b` by default, or any key you set (see
-`shortcut` under [Configure](#configure)). The status bar always shows
+`shortcut` under [Configure](#configure)). Or switch without the keyboard:
+`/seatbelt:mode` cycles, `/seatbelt:mode auto` sets a mode directly. The
+status bar always shows
 where you are: `seatbelt:fastened 🔒` (green), `seatbelt:auto 🤖` (yellow),
 `seatbelt:unfastened 💀` (red). The choice persists.
 
@@ -103,11 +105,16 @@ built-in regex fallback labels calls and the policy file is not consulted.
   whole server, `*` for everything). Non-bash calls are shown to the
   labeller as tool name plus arguments, truncated to 500 characters.
 - `shortcut`: the key that cycles the permission modes, as a pi key id
-  (`"alt+b"`, `"ctrl+shift+p"`, `"f9"`). Read at startup, so a change
-  needs a new session. Anything malformed falls back to `alt+b`.
+  (`"alt+b"`, `"ctrl+shift+p"`, `"f9"`, `"super+b"` for ⌘ on macOS).
+  Read at startup, so a change needs a new session. Anything malformed
+  falls back to `alt+b`.
   Some combos need the terminal to report modifiers distinctly: through
   tmux without `set -s extended-keys on`, `ctrl+shift+b` arrives as plain
-  `ctrl+b` (cursor-left) — `alt`- and `F`-keys work everywhere.
+  `ctrl+b` (cursor-left) — `alt`- and `F`1–`F12` keys work everywhere.
+  `super` (⌘) needs a terminal with Kitty keyboard protocol support
+  (Ghostty, kitty, WezTerm) and is usually intercepted by the terminal or
+  OS before it reaches pi. If a key combo does not work, `/seatbelt:mode`
+  always does.
 - `model`: the labeller. Pick one with `/seatbelt`, or pass it directly:
   `/seatbelt litellm/gpt-4o-mini`. Fast and cheap works well; the prompt
   is tiny. Without a model, or if the call fails or times out, the regex

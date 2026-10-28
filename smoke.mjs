@@ -137,4 +137,4 @@ assert.match(
 // plain style passes fragments through untouched
 assert.doesNotMatch(formatBatch(["ls"], [{ danger: "safe", purpose: "x", risk: "" }]), /\u001b\[/);
 
-console.log("pi-batch-permissions core: all checks passed");
+console.log("pi-seatbelt core: all checks passed");

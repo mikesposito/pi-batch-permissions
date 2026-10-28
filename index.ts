@@ -1,17 +1,18 @@
 /**
- * Batch permissions for pi.
+ * Seatbelt: a safe, ergonomic permission system for pi.
  *
- * Replaces per-call approval with one approval per chain of tool calls:
+ * The core feature: replaces per-call approval with one approval per chain
+ * of tool calls:
  * when an assistant message contains calls to gated tools, every call is
  * first labeled (safe / caution / dangerous, plus a one-line purpose) by a
  * cheap classifier model, then the user approves or rejects the whole batch
  * in a single dialog. Calls the model issues through nested execution
  * (codemode scripts) are approved one at a time as a fallback.
  *
- * The gated tools are configured in ~/.pi/agent/batch-permissions/config.json
+ * The gated tools are configured in ~/.pi/agent/seatbelt/config.json
  * under "tools" (exact names like "bash", "write", or prefix patterns like
  * "mcp__slack__*"; default ["bash"]). The classifier model is set with
- * /batchmodel. Custom labeling rules go in policy.md next to the config:
+ * /seatbelt. Custom labeling rules go in policy.md next to the config:
  * its whole content is sent to the labeller as user policy that overrides
  * the built-in defaults, and it is re-read on every batch. Without a usable
  * model, local heuristics label the calls instead (the policy file only
@@ -25,7 +26,7 @@
  * - "off": no approval requests at all.
  * In headless modes (no UI) only "safe" calls are auto-allowed.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -48,11 +49,11 @@ import {
 	type PermissionMode,
 } from "./core.ts";
 
-const CONFIG_DIR = join(homedir(), ".pi", "agent", "batch-permissions");
+const CONFIG_DIR = join(homedir(), ".pi", "agent", "seatbelt");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 const POLICY_PATH = join(CONFIG_DIR, "policy.md");
 
-const POLICY_TEMPLATE = `# Batch permissions policy
+const POLICY_TEMPLATE = `# Seatbelt policy
 
 Everything in this file is sent to the labeller model as additional policy and
 overrides its built-in defaults. Write plain-sentence rules about what this
@@ -69,15 +70,10 @@ const CONFIG_TEMPLATE = {
 
 let hasSeededFreshConfig = false;
 
-// Seeds the config folder on load: migrates the pre-folder single-file layout,
-// then writes templates for anything missing so a fresh install has editable
-// files. No "model" key in the template: /batchmodel sets it.
+// Seeds the config folder on load: writes templates for anything missing so a
+// fresh install has editable files. No "model" key in the template:
+// /seatbelt sets it.
 function ensureConfigFiles(): void {
-	const legacy = join(homedir(), ".pi", "agent", "batch-permissions.json");
-	if (existsSync(legacy) && !existsSync(CONFIG_PATH)) {
-		mkdirSync(CONFIG_DIR, { recursive: true });
-		renameSync(legacy, CONFIG_PATH);
-	}
 	if (!existsSync(CONFIG_PATH)) {
 		hasSeededFreshConfig = true;
 		mkdirSync(CONFIG_DIR, { recursive: true });
@@ -100,7 +96,7 @@ type Config = {
 function readConfig(): Config {
 	try {
 		// Safe cast: every field is optional, and each consumer validates the
-		// value it reads (isPermissionMode, string patterns, /batchmodel).
+		// value it reads (isPermissionMode, string patterns, /seatbelt).
 		return JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Config;
 	} catch {
 		return {};
@@ -326,14 +322,14 @@ export default function (pi: ExtensionAPI) {
 		return undefined;
 	});
 
-	pi.registerCommand("batchmodel", {
-		description: "Show or set the model that labels tool calls for batch approval",
+	pi.registerCommand("seatbelt", {
+		description: "Show or set the model that labels tool calls for approval",
 		handler: async (args, ctx) => {
 			const current = readConfig().model ?? "(none, using local heuristics)";
 			let value = args.trim();
 			if (!value) {
 				if (!ctx.hasUI) {
-					ctx.ui.notify(`Classifier model: ${current}. Usage: /batchmodel provider/model-id`, "info");
+					ctx.ui.notify(`Classifier model: ${current}. Usage: /seatbelt provider/model-id`, "info");
 					return;
 				}
 				const options = ctx.modelRegistry.getAvailable().map((m) => `${m.provider}/${m.id}`);
@@ -342,7 +338,7 @@ export default function (pi: ExtensionAPI) {
 					return;
 				}
 				const choice = await ctx.ui.select(
-					`Batch-approval classifier (current: ${current}). Pick a model:`,
+					`Seatbelt classifier (current: ${current}). Pick a model:`,
 					options,
 				);
 				if (!choice) return;
@@ -354,7 +350,7 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 			writeConfig({ ...readConfig(), model: value });
-			ctx.ui.notify(`Batch-approval labels now use ${model.name} (${value})`, "info");
+			ctx.ui.notify(`Seatbelt labels now use ${model.name} (${value})`, "info");
 		},
 	});
 
@@ -370,14 +366,14 @@ export default function (pi: ExtensionAPI) {
 		const color = mode === "all" ? "accent" : mode === "auto" ? "success" : "dim";
 		const text =
 			ctx.mode === "tui" ? ctx.ui.theme.fg(color, `perm:${mode}`) : `perm:${mode}`;
-		ctx.ui.setStatus("batch-permissions", text);
+		ctx.ui.setStatus("seatbelt", text);
 	}
 
 	pi.on("session_start", (_event, ctx) => {
 		updateStatus(ctx);
 		if (hasSeededFreshConfig && ctx.hasUI) {
 			ctx.ui.notify(
-				"batch-permissions: no labeller model set, using local heuristics. Pick one with /batchmodel.",
+				"seatbelt: no labeller model set, using local heuristics. Pick one with /seatbelt.",
 				"info",
 			);
 		}
@@ -389,12 +385,12 @@ export default function (pi: ExtensionAPI) {
 		ExtensionAPI["registerShortcut"]
 	>[0];
 	pi.registerShortcut(shortcut, {
-		description: "Cycle batch-permission mode (all, auto, off)",
+		description: "Cycle seatbelt mode (all, auto, off)",
 		handler: (ctx) => {
 			const mode = nextMode(getCurrentMode());
 			writeConfig({ ...readConfig(), mode });
 			updateStatus(ctx);
-			if (ctx.hasUI) ctx.ui.notify(`Batch permissions: ${mode} (${MODE_HINTS[mode]})`, "info");
+			if (ctx.hasUI) ctx.ui.notify(`Seatbelt: ${mode} (${MODE_HINTS[mode]})`, "info");
 		},
 	});
 }

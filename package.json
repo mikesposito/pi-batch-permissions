@@ -1,10 +1,10 @@
 {
-  "name": "pi-batch-permissions",
+  "name": "pi-seatbelt",
   "version": "0.2.0",
-  "description": "Your agent, your rules: a tailorable permission system that balances safety with development speed.",
+  "description": "A safe, ergonomic permission system for pi: one approval per chain, danger labels, your rules.",
   "keywords": [
     "pi-package",
-    "pi-batch-permissions"
+    "pi-seatbelt"
   ],
   "license": "MIT",
   "type": "module",
@@ -21,11 +21,11 @@
   "author": "mikesposito",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mikesposito/pi-batch-permissions.git"
+    "url": "git+https://github.com/mikesposito/pi-seatbelt.git"
   },
-  "homepage": "https://github.com/mikesposito/pi-batch-permissions#readme",
+  "homepage": "https://github.com/mikesposito/pi-seatbelt#readme",
   "bugs": {
-    "url": "https://github.com/mikesposito/pi-batch-permissions/issues"
+    "url": "https://github.com/mikesposito/pi-seatbelt/issues"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"

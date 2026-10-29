@@ -17,23 +17,17 @@
 		</clipPath>
 	</defs>
 	<rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
-	<!-- pi glyph -->
-	<g fill="url(#strap)">
-		<rect x="138" y="173" width="54" height="197" rx="27"/>
-		<rect x="324" y="173" width="54" height="197" rx="27"/>
-		<rect x="118" y="130" width="280" height="54" rx="27"/>
-	</g>
-	<!-- diagonal shoulder belt, clipped so it enters from off-frame -->
+	<!-- the belt: full diagonal, entering and leaving off-frame -->
 	<g clip-path="url(#frame)">
-		<g transform="rotate(55 186 247)">
-			<rect x="-31" y="223" width="434" height="48" rx="24" fill="url(#strap)" stroke="#0b1220" stroke-width="8"/>
-			<line x1="-20" y1="247" x2="160" y2="247" stroke="#64748b" stroke-width="6" stroke-dasharray="14 12" stroke-linecap="round"/>
+		<g transform="rotate(50 256 256)">
+			<rect x="-140" y="220" width="792" height="72" fill="url(#strap)" stroke="#0b1220" stroke-width="8"/>
+			<line x1="-120" y1="256" x2="640" y2="256" stroke="#64748b" stroke-width="6" stroke-dasharray="16 14" stroke-linecap="round"/>
 		</g>
 	</g>
-	<!-- buckle where the belt ends, below the gap between the legs -->
-	<g transform="rotate(55 310 430)">
-		<rect x="262" y="388" width="96" height="84" rx="20" fill="url(#buckle)" stroke="#0b1220" stroke-width="8"/>
-		<rect x="284" y="418" width="52" height="24" rx="8" fill="#0b1220"/>
-		<circle cx="310" cy="430" r="6" fill="#4ade80"/>
+	<!-- buckle riding on the belt, strap continues past it out of frame -->
+	<g transform="rotate(50 301 310)">
+		<rect x="243" y="259" width="116" height="102" rx="24" fill="url(#buckle)" stroke="#0b1220" stroke-width="8"/>
+		<rect x="269" y="297" width="64" height="26" rx="10" fill="#0b1220"/>
+		<circle cx="301" cy="310" r="7" fill="#4ade80"/>
 	</g>
 </svg>

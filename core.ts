@@ -66,25 +66,6 @@ export function withPolicy(base: string, policy: string): string {
 		: base;
 }
 
-const DANGEROUS_PATTERNS = [
-	/\brm\s+(-[a-z]*[rf][a-z]*|--recursive|--force)/i,
-	/\bsudo\b/i,
-	/\b(chmod|chown)\b[^;&|]*\b777\b/i,
-	/\bgit\s+push\b[^;&|]*(--force\b|\s-f\b)/i,
-	/\bdd\b/i,
-	/\bmkfs\b/i,
-	/\b(shutdown|reboot|halt)\b/i,
-	/\bkill(all)?\s+-9\b/i,
-	/(curl|wget)[^;&|]*\|\s*(sudo\s+)?(ba|z|fi)?sh\b/i,
-];
-
-const CAUTION_PATTERNS = [
-	/\b(git\s+(commit|reset|checkout|rebase|merge)|npm|npx|pnpm|yarn|pip|cargo|brew)\b/i,
-	/\b(curl|wget|ssh|scp|rsync)\b/i,
-	/\b(mv|cp|mkdir|touch|tee|sed\s+-i|chmod|chown|rm)\b/i,
-	/\b(kill|pkill)\b/i,
-];
-
 /** Exact tool name, or prefix match with a trailing "*" (e.g. "mcp__slack__*"). */
 export function matchesTool(patterns: readonly string[], name: string): boolean {
 	return patterns.some((p) => (p.endsWith("*") ? name.startsWith(p.slice(0, -1)) : p === name));
@@ -98,27 +79,10 @@ export function describeCall(toolName: string, args: Record<string, unknown>): s
 	return json === "{}" ? toolName : `${toolName} ${json}`;
 }
 
-const READ_ONLY_TOOLS = new Set(["read", "ls", "grep", "find"]);
-
-/** Fallback labels when no classifier model is configured or the call fails. */
-export function getHeuristicAssessment(toolName: string, input: string): Assessment {
-	const purpose = "no purpose (local heuristic label)";
-	if (toolName !== "bash") {
-		return { danger: READ_ONLY_TOOLS.has(toolName) ? "safe" : "caution", purpose, risk: "" };
-	}
-	if (DANGEROUS_PATTERNS.some((p) => p.test(input))) {
-		return { danger: "dangerous", purpose, risk: "matches a known dangerous pattern (local heuristic label)" };
-	}
-	if (CAUTION_PATTERNS.some((p) => p.test(input))) {
-		return { danger: "caution", purpose, risk: "" };
-	}
-	return { danger: "safe", purpose, risk: "" };
-}
-
 /**
  * Parse the classifier's reply. Expects a JSON array of {danger, purpose},
- * exactly `count` items, in input order. Returns undefined on any mismatch so
- * the caller falls back to heuristics.
+ * exactly `count` items, in input order. Returns undefined on any mismatch
+ * so the caller treats classification as failed.
  */
 export function parseAssessments(raw: string, count: number): Assessment[] | undefined {
 	const start = raw.indexOf("[");
@@ -175,6 +139,24 @@ export function formatBatch(
 		lines.push("");
 	}
 	lines.push(style.dim("One approval covers every tool call in this batch."));
+	return lines.join("\n");
+}
+
+/** Body for the approval dialog when the classifier failed: calls listed without labels. */
+export function formatUnlabeled(commands: string[], style: DialogStyle = plainStyle): string {
+	const lines = [
+		commands.length === 1 ? "Approve this tool call?" : `Approve ${commands.length} tool calls?`,
+		"",
+		style.label("caution", "! classifier unavailable: these calls could not be labeled"),
+		"",
+	];
+	for (let i = 0; i < commands.length; i++) {
+		lines.push(` ${String(i + 1).padEnd(2)} ${style.dim("> ")}${style.text(truncate(commands[i], 300))}`);
+		lines.push("");
+	}
+	if (commands.length > 1) {
+		lines.push(style.dim("One approval covers every tool call in this batch."));
+	}
 	return lines.join("\n");
 }
 

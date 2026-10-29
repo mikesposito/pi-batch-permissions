@@ -83,8 +83,8 @@ Example:
 - Treat any command that writes outside /tmp as dangerous.
 ```
 
-One limit: policy shapes the model's labels. With no model configured, a
-built-in regex fallback labels calls and the policy file is not consulted.
+One limit: policy shapes the model's labels. With no model configured the
+policy file is not consulted; gated calls always require approval.
 
 ## Configure
 
@@ -117,9 +117,11 @@ built-in regex fallback labels calls and the policy file is not consulted.
   always does.
 - `model`: the labeller. Pick one with `/seatbelt`, or pass it directly:
   `/seatbelt litellm/gpt-4o-mini`. Fast and cheap works well; the prompt
-  is tiny. Without a model, or if the call fails or times out, the regex
-  fallback takes over.
-- `timeoutMs`: give up on the labeller after this long and fall back.
+  is tiny. Without a model, or if the call fails or times out, the
+  approval dialog is shown unlabeled (and always shown, even in auto
+  mode); without a UI the call is blocked.
+- `timeoutMs`: give up on the labeller after this long; past it the batch
+  is treated as failed (unlabeled approval).
 
 Both config files are seeded as templates on first load. Fresh installs get a
 one-time notice to run `/seatbelt`.

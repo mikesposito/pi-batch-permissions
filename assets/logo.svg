@@ -12,17 +12,28 @@
 			<stop offset="0" stop-color="#fbbf24"/>
 			<stop offset="1" stop-color="#f59e0b"/>
 		</linearGradient>
+		<clipPath id="frame">
+			<rect x="16" y="16" width="480" height="480" rx="112"/>
+		</clipPath>
 	</defs>
 	<rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
-	<!-- pi legs -->
-	<rect x="150" y="199" width="56" height="170" rx="28" fill="url(#strap)"/>
-	<rect x="306" y="199" width="56" height="170" rx="28" fill="url(#strap)"/>
-	<!-- crossbar as the strap -->
-	<rect x="72" y="155" width="316" height="56" rx="28" fill="url(#strap)"/>
-	<!-- stitching -->
-	<line x1="98" y1="183" x2="366" y2="183" stroke="#64748b" stroke-width="6" stroke-dasharray="14 12" stroke-linecap="round"/>
-	<!-- buckle -->
-	<rect x="376" y="143" width="88" height="80" rx="20" fill="url(#buckle)"/>
-	<rect x="396" y="171" width="48" height="24" rx="8" fill="#0b1220"/>
-	<circle cx="420" cy="183" r="6" fill="#4ade80"/>
+	<!-- pi glyph -->
+	<g fill="url(#strap)">
+		<rect x="138" y="173" width="54" height="197" rx="27"/>
+		<rect x="324" y="173" width="54" height="197" rx="27"/>
+		<rect x="118" y="130" width="280" height="54" rx="27"/>
+	</g>
+	<!-- diagonal shoulder belt, clipped so it enters from off-frame -->
+	<g clip-path="url(#frame)">
+		<g transform="rotate(55 186 247)">
+			<rect x="-31" y="223" width="434" height="48" rx="24" fill="url(#strap)" stroke="#0b1220" stroke-width="8"/>
+			<line x1="-20" y1="247" x2="160" y2="247" stroke="#64748b" stroke-width="6" stroke-dasharray="14 12" stroke-linecap="round"/>
+		</g>
+	</g>
+	<!-- buckle where the belt ends, below the gap between the legs -->
+	<g transform="rotate(55 310 430)">
+		<rect x="262" y="388" width="96" height="84" rx="20" fill="url(#buckle)" stroke="#0b1220" stroke-width="8"/>
+		<rect x="284" y="418" width="52" height="24" rx="8" fill="#0b1220"/>
+		<circle cx="310" cy="430" r="6" fill="#4ade80"/>
+	</g>
 </svg>

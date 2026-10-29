@@ -48,11 +48,19 @@ Press the mode key to cycle: `alt+b` by default, or any key you set (see
 `/seatbelt:mode` cycles, `/seatbelt:mode auto` sets a mode directly. The
 status bar always shows
 where you are: `seatbelt:fastened 🔒` (green), `seatbelt:auto 🤖` (yellow),
-`seatbelt:unfastened 💀` (red). The choice persists.
+`seatbelt:unfastened 💀` (red).
+
+The mode is per session: switching (key or `/seatbelt:mode`) affects only the
+current session, and each session remembers its own mode across restarts
+(resuming a session restores it). New sessions start in the default mode from
+config; set it with `/seatbelt:default auto` (no argument shows the current
+default).
 
 - `fastened`: every chain asks once. The default.
 - `auto`: no dialog unless something is `DANGEROUS`. Labels decide what runs
-  silently, so pair it with a good policy file.
+  silently, so pair it with a good policy file. The labeller also sees what
+  you approved and rejected earlier in the session (including rejection
+  reasons), so its judgment builds on your own decisions.
 - `unfastened`: no gating, no classifier calls, no cost.
 
 Headless modes (print, JSON) have no dialogs: only `safe` calls auto-run,

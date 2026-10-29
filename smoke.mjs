@@ -6,6 +6,7 @@ import {
 	formatBatch,
 	formatSingle,
 	formatUnlabeled,
+	formatHistory,
 	normalizeMode,
 	normalizeShortcut,
 	isPermissionMode,
@@ -66,6 +67,25 @@ assert.equal(describeCall("bash", { command: "ls -la", timeout: 5 }), "ls -la");
 assert.equal(describeCall("read", { path: "a.txt" }), 'read {"path":"a.txt"}');
 assert.equal(describeCall("ls", {}), "ls");
 assert.ok(describeCall("write", { path: "a", content: "x".repeat(600) }).includes("…(truncated)"));
+
+// session decision history formatting
+assert.equal(formatHistory([]), "");
+const history = formatHistory([
+	{ tool: "bash", display: "npm install", allowed: true },
+	{ tool: "bash", display: "rm -rf build", allowed: false, reason: "keep build artifacts" },
+	{ tool: "bash", display: "ls -la", allowed: false },
+]);
+assert.match(history, /Earlier user decisions in this session \(most recent last\):/);
+assert.match(history, /- approved: npm install$/m);
+assert.match(history, /- rejected: rm -rf build \(user said: keep build artifacts\)$/m);
+assert.match(history, /- rejected: ls -la$/m);
+// only the last 20 records make it into the prompt
+const many = formatHistory(
+	Array.from({ length: 30 }, (_, i) => ({ tool: "bash", display: `cmd ${i}`, allowed: true })),
+);
+assert.doesNotMatch(many, /cmd 9$/m);
+assert.match(many, /- approved: cmd 10$/m);
+assert.match(many, /- approved: cmd 29$/m);
 
 // parser
 assert.deepEqual(

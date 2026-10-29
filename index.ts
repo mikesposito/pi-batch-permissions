@@ -19,7 +19,10 @@
  * the model).
  *
  * Permission modes (cycled with the configured shortcut key, default alt+b,
- * shown in the status bar):
+ * shown in the status bar) are per session: switching affects only the
+ * current session and is remembered per session id, so resuming a session
+ * restores its mode. New sessions start in the config's default "mode",
+ * settable with /seatbelt:default.
  * - "fastened" (default): one approval dialog per chain of gated tool calls.
  * - "auto": chains without a dangerous call run without asking; a dangerous
  *   call still shows the approval dialog.
@@ -39,6 +42,7 @@ import {
 	formatBatch,
 	formatSingle,
 	formatUnlabeled,
+	formatHistory,
 	normalizeMode,
 	normalizeShortcut,
 	isPermissionMode,
@@ -47,6 +51,7 @@ import {
 	withPolicy,
 	type Assessment,
 	type ClassifyFailure,
+	type DecisionRecord,
 	type DialogStyle,
 	type PermissionMode,
 } from "./core.ts";
@@ -54,6 +59,7 @@ import {
 const CONFIG_DIR = join(homedir(), ".pi", "agent", "seatbelt");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 const POLICY_PATH = join(CONFIG_DIR, "policy.md");
+const SESSION_MODES_PATH = join(CONFIG_DIR, "session-modes.json");
 
 const POLICY_TEMPLATE = `# Seatbelt policy
 
@@ -119,8 +125,46 @@ function readPolicy(): string {
 	}
 }
 
-function getCurrentMode(): PermissionMode {
-	return normalizeMode(readConfig().mode);
+function getCurrentMode(ctx: ExtensionContext): PermissionMode {
+	return sessionModes.get(ctx.sessionManager.getSessionId()) ?? normalizeMode(readConfig().mode);
+}
+
+// Per-session mode overrides, persisted by session id so a resumed session
+// keeps its mode. shortcut: entries are never pruned; revisit if this grows large
+const sessionModes = new Map<string, PermissionMode>();
+
+function loadSessionModes(): void {
+	try {
+		// Safe cast: values are validated with isPermissionMode before use.
+		const raw = JSON.parse(readFileSync(SESSION_MODES_PATH, "utf8")) as Record<string, unknown>;
+		for (const [id, mode] of Object.entries(raw)) {
+			if (isPermissionMode(mode)) sessionModes.set(id, mode);
+		}
+	} catch {}
+}
+
+function setSessionMode(ctx: ExtensionContext, mode: PermissionMode): void {
+	sessionModes.set(ctx.sessionManager.getSessionId(), mode);
+	mkdirSync(CONFIG_DIR, { recursive: true });
+	writeFileSync(SESSION_MODES_PATH, `${JSON.stringify(Object.fromEntries(sessionModes), null, 2)}\n`);
+}
+
+// User decisions from the current session, fed to the classifier as context.
+const sessionHistory = new Map<string, DecisionRecord[]>();
+
+function recordDecisions(
+	ctx: ExtensionContext,
+	entries: readonly GatedCall[],
+	displays: readonly string[],
+	isAllowed: boolean,
+	rejectMessage?: string,
+): void {
+	const id = ctx.sessionManager.getSessionId();
+	const history = sessionHistory.get(id) ?? [];
+	for (const [i, entry] of entries.entries()) {
+		history.push({ tool: entry.tool, display: displays[i], allowed: isAllowed, reason: isAllowed ? undefined : rejectMessage });
+	}
+	sessionHistory.set(id, history);
 }
 
 function getGatedTools(): string[] {
@@ -147,6 +191,10 @@ For each call return:
 - "danger": "safe" (read-only or trivially reversible: ls, cat, grep, git status, reading a file), "caution" (changes files or state, installs code, reaches the network, or sends a message: mv, npm install, git commit, curl, write or edit a file), or "dangerous" (destroys data, alters the system, escalates privileges, or is hard to reverse: rm -rf, sudo, git push --force, chmod 777, dd, kill, deleting or overwriting files).
 - "purpose": one line, max 12 words, saying what the call does for the task.
 - "risk": one line, max 12 words, saying WHY the call is dangerous; the empty string "" when danger is not "dangerous".
+
+When earlier user decisions from this session are given, use them as context:
+a call similar to one the user approved leans safer; a call similar to one the
+user rejected, especially with a stated reason, leans dangerous.
 
 Respond with ONLY a JSON array in input order, no markdown fences:
 [{"danger":"safe","purpose":"...","risk":"..."}]`;
@@ -177,7 +225,18 @@ async function classifyCalls(
 
 	const user: UserMessage = {
 		role: "user",
-		content: [{ type: "text", text: `Task context:\n${taskContext || "(none)"}\n\nTool calls:\n${JSON.stringify(inputs)}` }],
+		content: [
+			{
+				type: "text",
+				text: [
+					`Task context:\n${taskContext || "(none)"}`,
+					formatHistory(sessionHistory.get(ctx.sessionManager.getSessionId()) ?? []),
+					`Tool calls:\n${JSON.stringify(inputs)}`,
+				]
+					.filter(Boolean)
+					.join("\n\n"),
+			},
+		],
 		timestamp: Date.now(),
 	};
 	try {
@@ -251,7 +310,7 @@ async function approveBatch(
 	taskContext: string,
 	ctx: ExtensionContext,
 ): Promise<void> {
-	const mode = getCurrentMode();
+	const mode = getCurrentMode(ctx);
 	if (mode === "unfastened") return;
 	const result = await classifyCalls(entries, taskContext, ctx);
 	const displays = entries.map((e) => describeCall(e.tool, e.args));
@@ -268,6 +327,7 @@ async function approveBatch(
 			);
 			isAllowed = decision.isAllowed;
 			rejectMessage = decision.rejectMessage;
+			recordDecisions(ctx, entries, displays, isAllowed, rejectMessage);
 		} else {
 			isAllowed = false;
 		}
@@ -281,6 +341,7 @@ async function approveBatch(
 		);
 		isAllowed = decision.isAllowed;
 		rejectMessage = decision.rejectMessage;
+		recordDecisions(ctx, entries, displays, isAllowed, rejectMessage);
 	} else {
 		// no UI: fail-safe, only clearly safe calls pass without a human
 		isAllowed = result.assessments.every((a) => a.danger === "safe");
@@ -292,6 +353,7 @@ async function approveBatch(
 
 export default function (pi: ExtensionAPI) {
 	ensureConfigFiles();
+	loadSessionModes();
 
 	// The assistant message is finalized before its tool calls execute, so the
 	// whole chain is known here and can be approved in one dialog.
@@ -305,7 +367,7 @@ export default function (pi: ExtensionAPI) {
 			)
 			.map((c) => ({ id: c.id, tool: c.name, args: c.arguments ?? {} }));
 		if (calls.length === 0) return;
-		if (getCurrentMode() === "unfastened") return;
+		if (getCurrentMode(ctx) === "unfastened") return;
 		const taskContext = message.content
 			.filter((c): c is { type: "text"; text: string } => c.type === "text")
 			.map((c) => c.text)
@@ -316,7 +378,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("tool_call", async (event, ctx) => {
 		if (!matchesTool(getGatedTools(), event.toolName)) return undefined;
-		if (getCurrentMode() === "unfastened") return undefined;
+		if (getCurrentMode(ctx) === "unfastened") return undefined;
 		if (!decisions.has(event.toolCallId)) {
 			// Nested or otherwise unseen call (for example a codemode script): approve it on its own
 			const entry: GatedCall = { id: event.toolCallId, tool: event.toolName, args: getCallArgs(event.input) };
@@ -334,12 +396,13 @@ export default function (pi: ExtensionAPI) {
 					);
 					isAllowed = decision.isAllowed;
 					rejectMessage = decision.rejectMessage;
+					recordDecisions(ctx, [entry], [describeCall(entry.tool, entry.args)], isAllowed, rejectMessage);
 				} else {
 					isAllowed = false;
 				}
 			} else {
 				const assessment = result.assessments[0];
-				if (getCurrentMode() === "auto" && assessment.danger !== "dangerous") {
+				if (getCurrentMode(ctx) === "auto" && assessment.danger !== "dangerous") {
 					isAllowed = true;
 				} else if (ctx.hasUI) {
 					const decision = await approveWithDialog(
@@ -349,6 +412,7 @@ export default function (pi: ExtensionAPI) {
 					);
 					isAllowed = decision.isAllowed;
 					rejectMessage = decision.rejectMessage;
+					recordDecisions(ctx, [entry], [describeCall(entry.tool, entry.args)], isAllowed, rejectMessage);
 				} else {
 					isAllowed = assessment.danger === "safe";
 				}
@@ -421,7 +485,7 @@ export default function (pi: ExtensionAPI) {
 
 	function updateStatus(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return;
-		const mode = getCurrentMode();
+		const mode = getCurrentMode(ctx);
 		const label = `seatbelt:${MODE_LABELS[mode]}`;
 		const text = ctx.mode === "tui" ? ctx.ui.theme.fg(MODE_COLOR[mode], label) : label;
 		ctx.ui.setStatus("seatbelt", text);
@@ -436,10 +500,34 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 			// Safe cast: wanted is non-empty and passed isPermissionMode above.
-			const mode = (wanted || nextMode(getCurrentMode())) as PermissionMode;
-			writeConfig({ ...readConfig(), mode });
+			const mode = (wanted || nextMode(getCurrentMode(ctx))) as PermissionMode;
+			setSessionMode(ctx, mode);
 			updateStatus(ctx);
-			ctx.ui.notify(`Seatbelt: ${mode} (${MODE_HINTS[mode]})`, "info");
+			ctx.ui.notify(`Seatbelt: ${mode} (${MODE_HINTS[mode]}), this session only`, "info");
+		},
+	});
+
+	pi.registerCommand("seatbelt:default", {
+		description: "Set the default mode for new sessions (fastened, auto, unfastened); no argument shows it",
+		handler: async (args, ctx) => {
+			const wanted = args.trim();
+			if (!wanted) {
+				const current = normalizeMode(readConfig().mode);
+				ctx.ui.notify(
+					`Default mode for new sessions: ${current}. Usage: /seatbelt:default fastened|auto|unfastened`,
+					"info",
+				);
+				return;
+			}
+			if (!isPermissionMode(wanted)) {
+				ctx.ui.notify(`Unknown mode: ${wanted}. Use fastened, auto, or unfastened.`, "error");
+				return;
+			}
+			writeConfig({ ...readConfig(), mode: wanted });
+			ctx.ui.notify(
+				`New sessions will start ${wanted} (${MODE_HINTS[wanted]}). This session stays ${getCurrentMode(ctx)}.`,
+				"info",
+			);
 		},
 	});
 
@@ -461,10 +549,10 @@ export default function (pi: ExtensionAPI) {
 	pi.registerShortcut(shortcut, {
 		description: "Cycle seatbelt mode (fastened, auto, unfastened)",
 		handler: (ctx) => {
-			const mode = nextMode(getCurrentMode());
-			writeConfig({ ...readConfig(), mode });
+			const mode = nextMode(getCurrentMode(ctx));
+			setSessionMode(ctx, mode);
 			updateStatus(ctx);
-			if (ctx.hasUI) ctx.ui.notify(`Seatbelt: ${mode} (${MODE_HINTS[mode]})`, "info");
+			if (ctx.hasUI) ctx.ui.notify(`Seatbelt: ${mode} (${MODE_HINTS[mode]}), this session only`, "info");
 		},
 	});
 }

@@ -79,6 +79,28 @@ export function describeCall(toolName: string, args: Record<string, unknown>): s
 	return json === "{}" ? toolName : `${toolName} ${json}`;
 }
 
+/** One user decision from the current session, used as classifier context. */
+export type DecisionRecord = {
+	tool: string;
+	/** The call as shown in the dialog (describeCall output). */
+	display: string;
+	allowed: boolean;
+	/** The user's stated reason, present only on rejects with a message. */
+	reason?: string;
+};
+
+/** Prior user decisions as classifier-prompt context; empty string when there is none. Most recent last, capped. */
+export function formatHistory(records: readonly DecisionRecord[], max = 20): string {
+	if (records.length === 0) return "";
+	const lines = records
+		.slice(-max)
+		.map(
+			(r) =>
+				`- ${r.allowed ? "approved" : "rejected"}: ${r.display}${r.reason ? ` (user said: ${r.reason})` : ""}`,
+		);
+	return `Earlier user decisions in this session (most recent last):\n${lines.join("\n")}`;
+}
+
 /**
  * Parse the classifier's reply. Expects a JSON array of {danger, purpose},
  * exactly `count` items, in input order. Returns undefined on any mismatch

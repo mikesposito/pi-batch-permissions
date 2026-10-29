@@ -1,5 +1,9 @@
 # pi-seatbelt
 
+<p align="center">
+	<img src="assets/logo.svg" width="144" alt="pi-seatbelt logo: a diagonal seatbelt strap with a buckle">
+</p>
+
 [![npm version](https://img.shields.io/npm/v/pi-seatbelt)](https://www.npmjs.com/package/pi-seatbelt)
 [![license](https://img.shields.io/npm/l/pi-seatbelt)](LICENSE)
 

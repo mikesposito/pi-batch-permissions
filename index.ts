@@ -15,8 +15,8 @@
  * /seatbelt. Custom labeling rules go in policy.md next to the config:
  * its whole content is sent to the labeller as user policy that overrides
  * the built-in defaults, and it is re-read on every batch. Without a usable
- * model, local heuristics label the calls instead (the policy file only
- * affects the model).
+ * model, every gated call requires approval (the policy file only affects
+ * the model).
  *
  * Permission modes (cycled with the configured shortcut key, default alt+b,
  * shown in the status bar):
@@ -34,11 +34,11 @@ import type { Model, UserMessage } from "@earendil-works/pi-ai";
 import {
 	DEFAULT_SHORTCUT,
 	describeCall,
-	getHeuristicAssessment,
 	matchesTool,
 	parseAssessments,
 	formatBatch,
 	formatSingle,
+	formatUnlabeled,
 	normalizeMode,
 	normalizeShortcut,
 	isPermissionMode,
@@ -46,6 +46,7 @@ import {
 	plainStyle,
 	withPolicy,
 	type Assessment,
+	type ClassifyFailure,
 	type DialogStyle,
 	type PermissionMode,
 } from "./core.ts";
@@ -150,7 +151,7 @@ For each call return:
 Respond with ONLY a JSON array in input order, no markdown fences:
 [{"danger":"safe","purpose":"...","risk":"..."}]`;
 
-type Decision = { isAllowed: boolean; assessment: Assessment; rejectMessage?: string };
+type Decision = { isAllowed: boolean; rejectMessage?: string };
 
 const decisions = new Map<string, Decision>();
 
@@ -160,16 +161,19 @@ type GatedCall = {
 	args: Record<string, unknown>;
 };
 
+/** classifyCalls result: labels on success, the failure reason otherwise. */
+type ClassifyResult = { ok: true; assessments: Assessment[] } | { ok: false; failure: ClassifyFailure };
+
 async function classifyCalls(
 	calls: GatedCall[],
 	taskContext: string,
 	ctx: ExtensionContext,
-): Promise<Assessment[]> {
+): Promise<ClassifyResult> {
 	const { model: spec, timeoutMs = 20000 } = readConfig();
 	const system = withPolicy(CLASSIFIER_SYSTEM, readPolicy());
 	const inputs = calls.map((c) => ({ tool: c.tool, input: describeCall(c.tool, c.args) }));
 	const model = findModel(spec, ctx);
-	if (!model) return inputs.map((i) => getHeuristicAssessment(i.tool, i.input));
+	if (!model) return { ok: false, failure: "no-model" };
 
 	const user: UserMessage = {
 		role: "user",
@@ -187,9 +191,9 @@ async function classifyCalls(
 			.map((c) => c.text)
 			.join("\n");
 		const parsed = parseAssessments(text, calls.length);
-		if (parsed) return parsed;
+		if (parsed) return { ok: true, assessments: parsed };
 	} catch {}
-	return inputs.map((i) => getHeuristicAssessment(i.tool, i.input));
+	return { ok: false, failure: "unavailable" };
 }
 
 const DANGER_COLOR = {
@@ -208,6 +212,15 @@ function getDialogStyle(ctx: ExtensionContext): DialogStyle {
 		text: (text) => theme.fg("text", text),
 		dim: (text) => theme.fg("dim", text),
 	};
+}
+
+function notifyClassifyFailure(failure: ClassifyFailure, ctx: ExtensionContext): void {
+	if (failure === "no-model" && ctx.hasUI) {
+		ctx.ui.notify(
+			"seatbelt: no classifier model set, so every gated call requires approval. Pick one with /seatbelt.",
+			"warning",
+		);
+	}
 }
 
 // Runs the approval dialog (or headless fallback) and stores one decision per
@@ -240,15 +253,29 @@ async function approveBatch(
 ): Promise<void> {
 	const mode = getCurrentMode();
 	if (mode === "unfastened") return;
-	const assessments = await classifyCalls(entries, taskContext, ctx);
+	const result = await classifyCalls(entries, taskContext, ctx);
 	const displays = entries.map((e) => describeCall(e.tool, e.args));
 	let isAllowed: boolean;
 	let rejectMessage: string | undefined;
-	if (mode === "auto" && assessments.every((a) => a.danger !== "dangerous")) {
+	if (!result.ok) {
+		// classifier failed: always ask, no matter the mode (fastened/auto); fail-safe without a UI
+		notifyClassifyFailure(result.failure, ctx);
+		if (ctx.hasUI) {
+			const decision = await approveWithDialog(
+				formatUnlabeled(displays, result.failure, getDialogStyle(ctx)),
+				entries.length === 1,
+				ctx,
+			);
+			isAllowed = decision.isAllowed;
+			rejectMessage = decision.rejectMessage;
+		} else {
+			isAllowed = false;
+		}
+	} else if (mode === "auto" && result.assessments.every((a) => a.danger !== "dangerous")) {
 		isAllowed = true;
 	} else if (ctx.hasUI) {
 		const decision = await approveWithDialog(
-			formatBatch(displays, assessments, getDialogStyle(ctx)),
+			formatBatch(displays, result.assessments, getDialogStyle(ctx)),
 			entries.length === 1,
 			ctx,
 		);
@@ -256,10 +283,10 @@ async function approveBatch(
 		rejectMessage = decision.rejectMessage;
 	} else {
 		// no UI: fail-safe, only clearly safe calls pass without a human
-		isAllowed = assessments.every((a) => a.danger === "safe");
+		isAllowed = result.assessments.every((a) => a.danger === "safe");
 	}
-	for (const [i, entry] of entries.entries()) {
-		decisions.set(entry.id, { isAllowed, assessment: assessments[i], rejectMessage });
+	for (const entry of entries) {
+		decisions.set(entry.id, { isAllowed, rejectMessage });
 	}
 }
 
@@ -293,23 +320,40 @@ export default function (pi: ExtensionAPI) {
 		if (!decisions.has(event.toolCallId)) {
 			// Nested or otherwise unseen call (for example a codemode script): approve it on its own
 			const entry: GatedCall = { id: event.toolCallId, tool: event.toolName, args: getCallArgs(event.input) };
-			const [assessment] = await classifyCalls([entry], "", ctx);
+			const result = await classifyCalls([entry], "", ctx);
 			let isAllowed: boolean;
 			let rejectMessage: string | undefined;
-			if (getCurrentMode() === "auto" && assessment.danger !== "dangerous") {
-				isAllowed = true;
-			} else if (ctx.hasUI) {
-				const decision = await approveWithDialog(
-					formatSingle(describeCall(entry.tool, entry.args), assessment, getDialogStyle(ctx)),
-					true,
-					ctx,
-				);
-				isAllowed = decision.isAllowed;
-				rejectMessage = decision.rejectMessage;
+			if (!result.ok) {
+				// classifier failed: always ask, no matter the mode (fastened/auto); fail-safe without a UI
+				notifyClassifyFailure(result.failure, ctx);
+				if (ctx.hasUI) {
+					const decision = await approveWithDialog(
+						formatUnlabeled([describeCall(entry.tool, entry.args)], result.failure, getDialogStyle(ctx)),
+						true,
+						ctx,
+					);
+					isAllowed = decision.isAllowed;
+					rejectMessage = decision.rejectMessage;
+				} else {
+					isAllowed = false;
+				}
 			} else {
-				isAllowed = assessment.danger === "safe";
+				const assessment = result.assessments[0];
+				if (getCurrentMode() === "auto" && assessment.danger !== "dangerous") {
+					isAllowed = true;
+				} else if (ctx.hasUI) {
+					const decision = await approveWithDialog(
+						formatSingle(describeCall(entry.tool, entry.args), assessment, getDialogStyle(ctx)),
+						true,
+						ctx,
+					);
+					isAllowed = decision.isAllowed;
+					rejectMessage = decision.rejectMessage;
+				} else {
+					isAllowed = assessment.danger === "safe";
+				}
 			}
-			decisions.set(event.toolCallId, { isAllowed, assessment, rejectMessage });
+			decisions.set(event.toolCallId, { isAllowed, rejectMessage });
 		}
 		const decision = decisions.get(event.toolCallId);
 		decisions.delete(event.toolCallId);
@@ -326,7 +370,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerCommand("seatbelt", {
 		description: "Show or set the model that labels tool calls for approval",
 		handler: async (args, ctx) => {
-			const current = readConfig().model ?? "(none, using local heuristics)";
+			const current = readConfig().model ?? "(none, every gated call requires approval)";
 			let value = args.trim();
 			if (!value) {
 				if (!ctx.hasUI) {
@@ -403,7 +447,7 @@ export default function (pi: ExtensionAPI) {
 		updateStatus(ctx);
 		if (hasSeededFreshConfig && ctx.hasUI) {
 			ctx.ui.notify(
-				"seatbelt: no labeller model set, using local heuristics. Pick one with /seatbelt.",
+				"seatbelt: no labeller model set, so every gated call requires approval. Pick one with /seatbelt.",
 				"info",
 			);
 		}

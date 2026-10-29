@@ -119,7 +119,9 @@ policy file is not consulted; gated calls always require approval.
   `/seatbelt litellm/gpt-4o-mini`. Fast and cheap works well; the prompt
   is tiny. Without a model, or if the call fails or times out, the
   approval dialog is shown unlabeled (and always shown, even in auto
-  mode); without a UI the call is blocked.
+  mode), with a warning naming the cause; without a UI the call is
+  blocked. A missing model also raises a recurring toast pointing at
+  `/seatbelt`.
 - `timeoutMs`: give up on the labeller after this long; past it the batch
   is treated as failed (unlabeled approval).
 

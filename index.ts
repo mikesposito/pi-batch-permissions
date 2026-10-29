@@ -46,6 +46,7 @@ import {
 	plainStyle,
 	withPolicy,
 	type Assessment,
+	type ClassifyFailure,
 	type DialogStyle,
 	type PermissionMode,
 } from "./core.ts";
@@ -160,17 +161,19 @@ type GatedCall = {
 	args: Record<string, unknown>;
 };
 
-/** Classify the calls; undefined means no model, a failed call, or an unusable reply. */
+/** classifyCalls result: labels on success, the failure reason otherwise. */
+type ClassifyResult = { ok: true; assessments: Assessment[] } | { ok: false; failure: ClassifyFailure };
+
 async function classifyCalls(
 	calls: GatedCall[],
 	taskContext: string,
 	ctx: ExtensionContext,
-): Promise<Assessment[] | undefined> {
+): Promise<ClassifyResult> {
 	const { model: spec, timeoutMs = 20000 } = readConfig();
 	const system = withPolicy(CLASSIFIER_SYSTEM, readPolicy());
 	const inputs = calls.map((c) => ({ tool: c.tool, input: describeCall(c.tool, c.args) }));
 	const model = findModel(spec, ctx);
-	if (!model) return undefined;
+	if (!model) return { ok: false, failure: "no-model" };
 
 	const user: UserMessage = {
 		role: "user",
@@ -188,9 +191,9 @@ async function classifyCalls(
 			.map((c) => c.text)
 			.join("\n");
 		const parsed = parseAssessments(text, calls.length);
-		if (parsed) return parsed;
+		if (parsed) return { ok: true, assessments: parsed };
 	} catch {}
-	return undefined;
+	return { ok: false, failure: "unavailable" };
 }
 
 const DANGER_COLOR = {
@@ -209,6 +212,15 @@ function getDialogStyle(ctx: ExtensionContext): DialogStyle {
 		text: (text) => theme.fg("text", text),
 		dim: (text) => theme.fg("dim", text),
 	};
+}
+
+function notifyClassifyFailure(failure: ClassifyFailure, ctx: ExtensionContext): void {
+	if (failure === "no-model" && ctx.hasUI) {
+		ctx.ui.notify(
+			"seatbelt: no classifier model set, so every gated call requires approval. Pick one with /seatbelt.",
+			"warning",
+		);
+	}
 }
 
 // Runs the approval dialog (or headless fallback) and stores one decision per
@@ -241,15 +253,16 @@ async function approveBatch(
 ): Promise<void> {
 	const mode = getCurrentMode();
 	if (mode === "unfastened") return;
-	const assessments = await classifyCalls(entries, taskContext, ctx);
+	const result = await classifyCalls(entries, taskContext, ctx);
 	const displays = entries.map((e) => describeCall(e.tool, e.args));
 	let isAllowed: boolean;
 	let rejectMessage: string | undefined;
-	if (!assessments) {
+	if (!result.ok) {
 		// classifier failed: always ask, no matter the mode (fastened/auto); fail-safe without a UI
+		notifyClassifyFailure(result.failure, ctx);
 		if (ctx.hasUI) {
 			const decision = await approveWithDialog(
-				formatUnlabeled(displays, getDialogStyle(ctx)),
+				formatUnlabeled(displays, result.failure, getDialogStyle(ctx)),
 				entries.length === 1,
 				ctx,
 			);
@@ -258,11 +271,11 @@ async function approveBatch(
 		} else {
 			isAllowed = false;
 		}
-	} else if (mode === "auto" && assessments.every((a) => a.danger !== "dangerous")) {
+	} else if (mode === "auto" && result.assessments.every((a) => a.danger !== "dangerous")) {
 		isAllowed = true;
 	} else if (ctx.hasUI) {
 		const decision = await approveWithDialog(
-			formatBatch(displays, assessments, getDialogStyle(ctx)),
+			formatBatch(displays, result.assessments, getDialogStyle(ctx)),
 			entries.length === 1,
 			ctx,
 		);
@@ -270,7 +283,7 @@ async function approveBatch(
 		rejectMessage = decision.rejectMessage;
 	} else {
 		// no UI: fail-safe, only clearly safe calls pass without a human
-		isAllowed = assessments.every((a) => a.danger === "safe");
+		isAllowed = result.assessments.every((a) => a.danger === "safe");
 	}
 	for (const entry of entries) {
 		decisions.set(entry.id, { isAllowed, rejectMessage });
@@ -307,15 +320,15 @@ export default function (pi: ExtensionAPI) {
 		if (!decisions.has(event.toolCallId)) {
 			// Nested or otherwise unseen call (for example a codemode script): approve it on its own
 			const entry: GatedCall = { id: event.toolCallId, tool: event.toolName, args: getCallArgs(event.input) };
-			const assessments = await classifyCalls([entry], "", ctx);
-			const assessment = assessments?.[0];
+			const result = await classifyCalls([entry], "", ctx);
 			let isAllowed: boolean;
 			let rejectMessage: string | undefined;
-			if (!assessment) {
+			if (!result.ok) {
 				// classifier failed: always ask, no matter the mode (fastened/auto); fail-safe without a UI
+				notifyClassifyFailure(result.failure, ctx);
 				if (ctx.hasUI) {
 					const decision = await approveWithDialog(
-						formatUnlabeled([describeCall(entry.tool, entry.args)], getDialogStyle(ctx)),
+						formatUnlabeled([describeCall(entry.tool, entry.args)], result.failure, getDialogStyle(ctx)),
 						true,
 						ctx,
 					);
@@ -324,18 +337,21 @@ export default function (pi: ExtensionAPI) {
 				} else {
 					isAllowed = false;
 				}
-			} else if (getCurrentMode() === "auto" && assessment.danger !== "dangerous") {
-				isAllowed = true;
-			} else if (ctx.hasUI) {
-				const decision = await approveWithDialog(
-					formatSingle(describeCall(entry.tool, entry.args), assessment, getDialogStyle(ctx)),
-					true,
-					ctx,
-				);
-				isAllowed = decision.isAllowed;
-				rejectMessage = decision.rejectMessage;
 			} else {
-				isAllowed = assessment.danger === "safe";
+				const assessment = result.assessments[0];
+				if (getCurrentMode() === "auto" && assessment.danger !== "dangerous") {
+					isAllowed = true;
+				} else if (ctx.hasUI) {
+					const decision = await approveWithDialog(
+						formatSingle(describeCall(entry.tool, entry.args), assessment, getDialogStyle(ctx)),
+						true,
+						ctx,
+					);
+					isAllowed = decision.isAllowed;
+					rejectMessage = decision.rejectMessage;
+				} else {
+					isAllowed = assessment.danger === "safe";
+				}
 			}
 			decisions.set(event.toolCallId, { isAllowed, rejectMessage });
 		}

@@ -122,18 +122,22 @@ assert.match(
 assert.doesNotMatch(formatBatch(["ls"], [{ danger: "safe", purpose: "x", risk: "" }]), /\u001b\[/);
 
 // unlabeled dialog when the classifier fails
-const unlabeledSingle = formatUnlabeled(["ls -la"]);
+const unlabeledSingle = formatUnlabeled(["ls -la"], "unavailable");
 assert.match(unlabeledSingle, /Approve this tool call\?/);
 assert.match(unlabeledSingle, /! classifier unavailable: these calls could not be labeled/);
 assert.match(unlabeledSingle, /> ls -la/);
 assert.ok(!unlabeledSingle.includes("One approval covers"));
 assert.ok(!unlabeledSingle.includes("What it does:"));
-const unlabeledBatch = formatUnlabeled(["ls -la", "rm -rf /tmp/batch-demo"]);
+const unlabeledBatch = formatUnlabeled(["ls -la", "rm -rf /tmp/batch-demo"], "unavailable");
 assert.match(unlabeledBatch, /Approve 2 tool calls\?/);
 assert.match(unlabeledBatch, /> ls -la/);
 assert.match(unlabeledBatch, /> rm -rf \/tmp\/batch-demo/);
 assert.match(unlabeledBatch, /One approval covers every tool call/);
 assert.ok(!unlabeledBatch.includes("What it does:"));
 assert.ok(!unlabeledBatch.includes("DANGEROUS"));
+// the no-model failure gets a more specific warning
+const noModelSingle = formatUnlabeled(["ls -la"], "no-model");
+assert.match(noModelSingle, /! no classifier model set: these calls could not be labeled \(pick one with \/seatbelt\)/);
+assert.ok(!noModelSingle.includes("classifier unavailable"));
 
 console.log("pi-seatbelt core: all checks passed");

@@ -142,12 +142,23 @@ export function formatBatch(
 	return lines.join("\n");
 }
 
+/** Why the classifier could not label calls: no model configured, or the call itself failed. */
+export type ClassifyFailure = "no-model" | "unavailable";
+
 /** Body for the approval dialog when the classifier failed: calls listed without labels. */
-export function formatUnlabeled(commands: string[], style: DialogStyle = plainStyle): string {
+export function formatUnlabeled(
+	commands: string[],
+	failure: ClassifyFailure,
+	style: DialogStyle = plainStyle,
+): string {
+	const warning =
+		failure === "no-model"
+			? "! no classifier model set: these calls could not be labeled (pick one with /seatbelt)"
+			: "! classifier unavailable: these calls could not be labeled";
 	const lines = [
 		commands.length === 1 ? "Approve this tool call?" : `Approve ${commands.length} tool calls?`,
 		"",
-		style.label("caution", "! classifier unavailable: these calls could not be labeled"),
+		style.label("caution", warning),
 		"",
 	];
 	for (let i = 0; i < commands.length; i++) {
